@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CrowdIQ — Crowd Intelligence Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root{
+    --bg:#0B0D10;
+    --surface:#14171B;
+    --surface-2:#1B1F24;
+    --border:#242930;
+    --text:#EDEFF2;
+    --muted:#8A93A0;
+    --green:#34C77B;
+    --amber:#E8A93B;
+    --red:#E5484D;
+    --accent:#5B8DEF;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:var(--bg);color:var(--text);}
+  body{font-family:'Inter',ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+  .font-mono{font-family:'JetBrains Mono',ui-monospace,monospace;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#2A2F36;border-radius:8px;}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  @keyframes fadeSlideUp{from{opacity:0;transform:translateY(24px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes toastIn{from{opacity:0;transform:translate(-50%,-12px);}to{opacity:1;transform:translate(-50%,0);}}
+  @keyframes pulseOnce{0%{background-color:rgba(91,141,239,0.25);}100%{background-color:transparent;}}
+  .anim-fade{animation:fadeSlideUp 0.8s ease both;}
+  .anim-pulse{animation:pulseOnce 1.2s ease;}
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important;transition:none !important;}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+
+const { useState, useEffect, useRef, useMemo } = React;
+
+/* ============================== DATA ============================== */
+
+const VENUE_SEED = [
+  { id:'reg',  name:'Registration',       code:'Zone R', type:'REGISTRATION', capacity:400,  occ:180, row:1, col:1 },
+  { id:'aud',  name:'Auditorium',         code:'Zone A', type:'AUDITORIUM',   capacity:1000, occ:430, row:1, col:2 },
+  { id:'halA', name:'Exhibition Hall A',  code:'Zone C', type:'EXHIBITION',   capacity:800,  occ:410, row:1, col:3 },
+  { id:'halB', name:'Exhibition Hall B',  code:'Zone B', type:'EXHIBITION',   capacity:800,  occ:720, row:1, col:4 },
+  { id:'parA', name:'Parking A',          code:'Lot P1', type:'PARKING',      capacity:300,  occ:210, row:2, col:1 },
+  { id:'parB', name:'Parking B',          code:'Lot P2', type:'PARKING',      capacity:250,  occ:140, row:2, col:2 },
+  { id:'wrk',  name:'Workshop Room 1',    code:'Zone D', type:'WORKSHOP',     capacity:200,  occ:95,  row:2, col:3 },
+  { id:'food', name:'Food Court',         code:'Zone E', type:'HOSPITALITY',  capacity:500,  occ:260, row:2, col:4 },
+];
+
+const GATE_SEED = [
+  { id:'g1', name:'Gate 1', capacityPerHr:600, currentLoad:420 },
+  { id:'g2', name:'Gate 2', capacityPerHr:500, currentLoad:480 },
+  { id:'g3', name:'Gate 3', capacityPerHr:400, currentLoad:150 },
+];
+
+const SESSION_SEED = [
+  { id:'s0', title:'Registration Desk Open',        venueId:'reg',  start:'9:00 AM',  end:'6:00 PM',  expected:0    },
+  { id:'s1', title:'Hackathon Kickoff',              venueId:'aud',  start:'10:00 AM', end:'12:00 PM', expected:500  },
+  { id:'s2', title:'Robotics Exhibition',            venueId:'halB', start:'11:00 AM', end:'3:00 PM',  expected:1500 },
+  { id:'s3', title:'Lunch Break',                    venueId:'food', start:'1:00 PM',  end:'2:00 PM',  expected:2000 },
+  { id:'s4', title:'AI Workshop',                    venueId:'wrk',  start:'2:00 PM',  end:'3:30 PM',  expected:300  },
+  { id:'s5', title:'Tech Talk: Future of Robotics',   venueId:'halA', start:'4:00 PM',  end:'5:00 PM',  expected:1200 },
+  { id:'s6', title:'Final Showcase',                 venueId:'halA', start:'6:00 PM',  end:'8:00 PM',  expected:2500 },
+];
+
+const VISITOR_GROUPS = [
+  { id:'v1', name:'Students',             size:2200, preferredVenueId:'halB', window:'9:00–11:00 AM' },
+  { id:'v2', name:'External Participants',size:600,  preferredVenueId:'halA', window:'10:00 AM–12:00 PM' },
+  { id:'v3', name:'Judges',               size:40,   preferredVenueId:'halB', window:'10:30–11:00 AM' },
+  { id:'v4', name:'Faculty',              size:120,  preferredVenueId:'aud',  window:'9:00–10:00 AM' },
+  { id:'v5', name:'Sponsors',             size:60,   preferredVenueId:'halA', window:'1:00–2:00 PM' },
+  { id:'v6', name:'Volunteers',           size:150,  preferredVenueId:'reg',  window:'8:00–9:00 AM' },
+  { id:'v7', name:'Guests',               size:830,  preferredVenueId:'food', window:'12:00–2:00 PM' },
+];
+
+const ALERT_SEED = [
+  {
+    id:'al1',
+    venueId:'halB',
+    severity:'CRITICAL',
+    message:'Exhibition Hall B is projected to exceed capacity within 20 minutes',
+    cause:'High inflow toward the Robotics Exhibition, combined with limited hall capacity at Exhibition Hall B.',
+    createdAt:'11:14 AM',
+    resolved:false,
+    prediction:[
+      { label:'Now',   pct:90  },
+      { label:'+10 min', pct:97  },
+      { label:'+20 min', pct:105 },
+      { label:'+30 min', pct:112 },
+    ],
+    recommendations:[
+      { id:'r1', label:'Redirect new arrivals to Exhibition Hall A', description:'Hall A is at 51% capacity with room for roughly 390 more visitors along the same walkway.', effect:8, cost:3, convenience:7, applied:false, moveTo:'halA', moveAmount:250 },
+      { id:'r2', label:'Reroute Gate 2 arrivals through Gate 3',      description:'Gate 3 is running at 38% of hourly capacity and feeds the same corridor toward Hall B.', effect:6, cost:2, convenience:8, applied:false, gateShift:{from:'g2', to:'g3', amount:120} },
+      { id:'r3', label:'Delay the 4 PM Tech Talk by 20 minutes',      description:'Pushing the Tech Talk back reduces early crossover traffic between Hall A and Hall B.', effect:5, cost:4, convenience:5, applied:false, delaySessionId:'s5' },
+    ],
+  },
+];
+
+/* ============================== ENGINE ============================== */
+// Pure, explainable functions — mirrors the CrowdIQ engine spec.
+
+function pct(venue){ return Math.round((venue.occ / venue.capacity) * 100); }
+
+function statusOf(venue){
+  const p = pct(venue);
+  if(p >= 90) return 'CRITICAL';
+  if(p >= 75) return 'HIGH';
+  if(p >= 50) return 'MEDIUM';
+  return 'LOW';
+}
+
+function statusColor(status){
+  if(status === 'CRITICAL') return 'var(--red)';
+  if(status === 'HIGH') return 'var(--amber)';
+  if(status === 'MEDIUM') return 'var(--accent)';
+  return 'var(--green)';
+}
+function statusDot(status){
+  if(status === 'CRITICAL' || status === 'HIGH') return '🔴';
+  if(status === 'MEDIUM') return '🟠';
+  return '🟢';
+}
+function statusLabel(status){
+  if(status === 'CRITICAL') return 'Critical';
+  if(status === 'HIGH') return 'High load';
+  if(status === 'MEDIUM') return 'Watch';
+  return 'Normal';
+}
+
+// score = effect*0.5 + (10-cost)*0.3 + convenience*0.2
+function scoreRecommendation(r){
+  return +(r.effect*0.5 + (10-r.cost)*0.3 + r.convenience*0.2).toFixed(1);
+}
+
+// linear-regression trend on a rolling occupancy history, projected N minutes out.
+function predictTrend(history, horizonMin){
+  if(!history || history.length < 2) return history && history.length ? history[history.length-1].occ : 0;
+  const first = history[0], last = history[history.length-1];
+  const n = history.length - 1;
+  const slopePerTick = (last.occ - first.occ) / n; // occupancy change per tick (1 tick ~= 1 sim-minute)
+  return Math.max(0, Math.round(last.occ + slopePerTick * horizonMin));
+}
+
+function findCause(venue, sessions){
+  const s = sessions.find(s => s.venueId === venue.id && s.expected > 0);
+  if(s) return `High inflow toward ${s.title}, combined with limited capacity at ${venue.name}.`;
+  return `Sustained arrivals are outpacing the exit rate at ${venue.name}.`;
+}
+
+/* ============================== SMALL UI PIECES ============================== */
+
+function Icon({ name, size=18, className='' }){
+  const p = {
+    menu:  <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>,
+    close: <><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></>,
+    arrow: <><line x1="4" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></>,
+    chev:  <polyline points="9 6 15 12 9 18"/>,
+    grid:  <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
+    alert: <><path d="M12 3l9 16H3z"/><line x1="12" y1="10" x2="12" y2="14"/><circle cx="12" cy="17" r="0.5"/></>,
+    map:   <><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></>,
+    sliders: <><line x1="4" y1="6" x2="20" y2="6"/><circle cx="14" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="8" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="16" cy="18" r="2"/></>,
+    history: <><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/><polyline points="12 8 12 12 15 14"/></>,
+    users:   <><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><path d="M16 8.2a3 3 0 1 1 0 5.8"/><path d="M19.5 20c0-2.6-1.4-4.6-3.5-5.5"/></>,
+    logout:  <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="15 17 20 12 15 7"/><line x1="20" y1="12" x2="9" y2="12"/></>,
+    check:   <polyline points="4 12 9 18 20 6"/>,
+    car:     <><path d="M4 16l1.5-5A2 2 0 0 1 7.4 9.5h9.2A2 2 0 0 1 18.5 11L20 16"/><rect x="3" y="16" width="18" height="4" rx="1.5"/><circle cx="7.5" cy="17.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="16.5" cy="17.5" r="1.2" fill="currentColor" stroke="none"/></>,
+  }[name];
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      {p}
+    </svg>
+  );
+}
+
+function Toast({ toast }){
+  if(!toast) return null;
+  return (
+    <div
+      className="fixed top-5 left-1/2 z-[100] px-4 py-2.5 rounded-lg text-sm font-medium shadow-lg"
+      style={{
+        animation:'toastIn 0.35s ease both',
+        background: toast.tone === 'critical' ? 'rgba(229,72,77,0.15)' : 'rgba(52,199,123,0.12)',
+        border: `1px solid ${toast.tone === 'critical' ? 'rgba(229,72,77,0.4)' : 'rgba(52,199,123,0.35)'}`,
+        color: toast.tone === 'critical' ? '#FF9A9D' : '#7FE3AC',
+      }}
+    >
+      {toast.message}
+    </div>
+  );
+}
+
+/* ============================== LANDING ============================== */
+
+function Landing({ onEnter }){
+  const [menuOpen, setMenuOpen] = useState(false);
+  const navLinks = ['Home', 'Live Demo', 'Platform', 'Contact'];
+
+  return (
+    <div className="relative h-screen w-full overflow-hidden bg-black">
+      <video
+        autoPlay muted loop playsInline
+        className="absolute w-full h-full object-cover"
+        style={{ objectPosition: '70% center' }}
+        src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260622_204221_5339e40b-e73d-4ab0-9c65-79c18c66fd50.mp4"
+      />
+      <div className="absolute inset-0" style={{background:'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.65) 100%)'}}/>
+
+      {/* Navbar */}
+      <div className="relative z-30 flex items-center justify-between px-6 py-5 md:px-12 lg:px-16">
+        <div className="flex items-center gap-10">
+          <span className="text-lg font-semibold tracking-tight text-white sm:text-xl">CrowdIQ</span>
+          <div className="hidden md:flex items-center gap-8">
+            {navLinks.map(l => (
+              <a key={l} href="#" onClick={(e)=>e.preventDefault()} className="text-sm text-white/80 hover:text-white transition-colors">{l}</a>
+            ))}
+          </div>
+        </div>
+        <div className="hidden md:block">
+          <button onClick={onEnter} className="rounded-lg bg-white px-5 py-2 text-sm font-medium text-black hover:scale-105 transition-transform">
+            Request a demo
+          </button>
+        </div>
+        <button
+          onClick={()=>setMenuOpen(v=>!v)}
+          className="md:hidden relative w-10 h-10 z-50 active:scale-90 transition-transform"
+          aria-label="Toggle menu"
+        >
+          <span className="absolute inset-0 flex items-center justify-center text-white transition-all duration-300" style={{opacity:menuOpen?0:1, transform:menuOpen?'rotate(90deg) scale(0.5)':'rotate(0) scale(1)'}}>
+            <Icon name="menu" />
+          </span>
+          <span className="absolute inset-0 flex items-center justify-center text-white transition-all duration-300" style={{opacity:menuOpen?1:0, transform:menuOpen?'rotate(0) scale(1)':'rotate(-90deg) scale(0.5)'}}>
+            <Icon name="close" />
+          </span>
+        </button>
+      </div>
+
+      {/* Mobile menu */}
+      <div
+        className="absolute inset-x-0 top-0 z-20 bg-black/98 backdrop-blur-xl transition-all duration-500 overflow-hidden"
+        style={{ height: menuOpen ? '100vh' : '0px', opacity: menuOpen ? 1 : 0, pointerEvents: menuOpen ? 'auto':'none', transitionTimingFunction:'cubic-bezier(0.16,1,0.3,1)' }}
+      >
+        <div className="flex h-full flex-col justify-center px-8" style={{transform: menuOpen? 'translateY(0)':'translateY(2rem)', opacity: menuOpen?1:0, transition:'all 0.5s ease 0.1s'}}>
+          {navLinks.map(l => (
+            <a key={l} href="#" onClick={(e)=>{e.preventDefault(); setMenuOpen(false);}} className="py-3 text-3xl font-medium text-white/90 hover:text-white">{l}</a>
+          ))}
+          <button onClick={()=>{setMenuOpen(false); onEnter();}} className="mt-6 w-fit rounded-full bg-white px-8 py-3.5 text-base font-medium text-black hover:scale-105 transition-transform">
+            Request a demo
+          </button>
+        </div>
+      </div>
+
+      {/* Hero content */}
+      <div className="relative z-10 flex flex-col justify-between px-6 pb-10 pt-12 sm:pb-12 sm:pt-16 md:px-12 md:pb-16 md:pt-20 lg:px-16" style={{height:'calc(100vh - 80px)'}}>
+        <div className="max-w-3xl">
+          <div className="mb-4 sm:mb-6 anim-fade" style={{animationDelay:'0.2s'}}>
+            <span className="text-xs sm:text-sm text-white/90">AI crowd intelligence for live events</span>
+          </div>
+          <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-medium leading-[1.1] tracking-tight text-white anim-fade" style={{animationDelay:'0.4s'}}>
+            Predicting the crowd<br/>before it becomes<br/>the crisis.
+          </h1>
+        </div>
+        <div>
+          <p className="text-sm sm:text-base md:text-lg leading-relaxed text-white/60 max-w-sm sm:max-w-lg mb-5 sm:mb-6 anim-fade" style={{animationDelay:'0.7s'}}>
+            CrowdIQ turns live occupancy data into an early warning system — forecasting bottlenecks, explaining why they're forming, and simulating the fix before you commit to it.
+          </p>
+          <button
+            onClick={onEnter}
+            className="rounded-lg bg-white px-5 py-2.5 sm:px-6 sm:py-3 text-sm font-medium text-black hover:scale-105 transition-transform inline-flex items-center gap-2 anim-fade"
+            style={{animationDelay:'0.9s'}}
+          >
+            Enter command center <Icon name="arrow" size={16}/>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================== LOGIN ============================== */
+
+function Login({ onLogin }){
+  const profiles = [
+    { role:'ORGANIZER', name:'Aditi Rao', title:'Event Organizer', access:'Full console access — venues, simulator, alerts, history', initials:'AR' },
+    { role:'VOLUNTEER', name:'Rohan Mehta', title:'Gate Volunteer', access:'Live map, alerts and schedule — read-only', initials:'RM' },
+  ];
+  return (
+    <div className="min-h-screen w-full flex items-center justify-center px-6" style={{background:'var(--bg)'}}>
+      <div className="w-full max-w-md">
+        <div className="mb-8 text-center">
+          <div className="text-lg font-semibold tracking-tight mb-1">CrowdIQ</div>
+          <h1 className="text-2xl font-medium mb-2">Choose a demo profile</h1>
+          <p className="text-sm" style={{color:'var(--muted)'}}>Two example accounts, two access levels.</p>
+        </div>
+        <div className="flex flex-col gap-3">
+          {profiles.map(p => (
+            <button
+              key={p.role}
+              onClick={()=>onLogin(p)}
+              className="text-left rounded-xl p-4 flex items-center gap-4 transition-colors hover:border-[var(--accent)]"
+              style={{background:'var(--surface)', border:'1px solid var(--border)'}}
+            >
+              <div className="w-11 h-11 rounded-full flex items-center justify-center font-mono text-sm font-medium shrink-0" style={{background:'var(--surface-2)', color:'var(--accent)'}}>
+                {p.initials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{p.name}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full" style={{background:'var(--surface-2)', color:'var(--muted)'}}>{p.title}</span>
+                </div>
+                <p className="text-xs mt-1" style={{color:'var(--muted)'}}>{p.access}</p>
+              </div>
+              <Icon name="chev" size={18} className="opacity-50 shrink-0" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================== APP SHELL ============================== */
+
+const NAV_ITEMS = [
+  { id:'dashboard', label:'Command center', icon:'grid',    organizerOnly:false },
+  { id:'alerts',     label:'Alerts',         icon:'alert',   organizerOnly:false },
+  { id:'venues',     label:'Venues',         icon:'map',     organizerOnly:false },
+  { id:'schedule',   label:'Schedule',       icon:'calendar',organizerOnly:false },
+  { id:'simulate',   label:'Simulator',      icon:'sliders', organizerOnly:true  },
+  { id:'history',    label:'History',        icon:'history', organizerOnly:true  },
+  { id:'visitor',    label:'Visitor app',    icon:'users',   organizerOnly:false },
+];
+
+function Sidebar({ view, setView, profile, onLogout }){
+  const items = NAV_ITEMS.filter(i => !i.organizerOnly || profile.role === 'ORGANIZER');
+  return (
+    <div className="hidden md:flex flex-col w-56 shrink-0 h-screen sticky top-0 py-6 px-3" style={{borderRight:'1px solid var(--border)'}}>
+      <div className="px-3 mb-8">
+        <span className="text-base font-semibold tracking-tight">CrowdIQ</span>
+      </div>
+      <div className="flex-1 flex flex-col gap-1">
+        {items.map(it => {
+          const active = view === it.id;
+          return (
+            <button
+              key={it.id}
+              onClick={()=>setView(it.id)}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
+              style={{
+                background: active ? 'var(--surface-2)' : 'transparent',
+                color: active ? 'var(--text)' : 'var(--muted)',
+              }}
+            >
+              <Icon name={it.icon} size={17}/>
+              {it.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="px-3 pt-4 mt-4" style={{borderTop:'1px solid var(--border)'}}>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center font-mono text-xs" style={{background:'var(--surface-2)', color:'var(--accent)'}}>{profile.initials}</div>
+          <div className="min-w-0">
+            <div className="text-sm truncate">{profile.name}</div>
+            <div className="text-xs" style={{color:'var(--muted)'}}>{profile.title}</div>
+          </div>
+        </div>
+        <button onClick={onLogout} className="flex items-center gap-2 text-xs w-full px-3 py-2 rounded-lg" style={{color:'var(--muted)', background:'var(--surface)'}}>
+          <Icon name="logout" size={14}/> Switch profile
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TopBar({ title, subtitle, live }){
+  return (
+    <div className="flex items-center justify-between px-6 md:px-8 py-5" style={{borderBottom:'1px solid var(--border)'}}>
+      <div>
+        <h1 className="text-lg font-medium">{title}</h1>
+        {subtitle && <p className="text-sm mt-0.5" style={{color:'var(--muted)'}}>{subtitle}</p>}
+      </div>
+      {live && (
+        <div className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-full" style={{background:'rgba(52,199,123,0.1)', border:'1px solid rgba(52,199,123,0.3)', color:'#7FE3AC'}}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{background:'var(--green)'}}/>
+          Live feed connected
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================== DASHBOARD ============================== */
+
+function KPICard({ label, value, sub }){
+  return (
+    <div className="rounded-xl p-4" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
+      <div className="text-xs" style={{color:'var(--muted)'}}>{label}</div>
+      <div className="font-mono text-2xl mt-1.5">{value}</div>
+      {sub && <div className="text-xs mt-1" style={{color:'var(--muted)'}}>{sub}</div>}
+    </div>
+  );
+}
+
+function ZoneTile({ venue, onClick, pulse }){
+  const st = statusOf(venue);
+  const p = pct(venue);
+  return (
+    <button
+      onClick={onClick}
+      className={`text-left p-3.5 rounded-md transition-colors ${pulse ? 'anim-pulse' : ''}`}
+      style={{ background:'var(--surface)', border:`1px solid ${st==='CRITICAL'?'rgba(229,72,77,0.5)':'var(--border)'}` }}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs" style={{color:'var(--muted)'}}>{venue.code}</span>
+        <span>{statusDot(st)}</span>
+      </div>
+      <div className="text-sm font-medium mb-1 truncate">{venue.name}</div>
+      <div className="flex items-end justify-between">
+        <span className="font-mono text-xl" style={{color:statusColor(st)}}>{p}%</span>
+        <span className="text-xs font-mono" style={{color:'var(--muted)'}}>{venue.occ}/{venue.capacity}</span>
+      </div>
+    </button>
+  );
+}
+
+function Dashboard({ venues, alerts, sessions, onOpenAlert, setView, loading }){
+  const activeAlerts = alerts.filter(a => !a.resolved);
+  const totalVisitors = venues.reduce((s,v)=>s+v.occ,0);
+  const activeVenues = venues.filter(v=>v.occ>0).length;
+  const highRisk = venues.filter(v => pct(v) >= 75).length;
+
+  if(loading){
+    return (
+      <div className="p-6 md:p-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          {[0,1,2,3].map(i=><div key={i} className="h-20 rounded-xl animate-pulse" style={{background:'var(--surface)'}}/>)}
+        </div>
+        <div className="h-96 rounded-xl animate-pulse" style={{background:'var(--surface)'}}/>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 md:p-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <KPICard label="Visitors on site" value={totalVisitors.toLocaleString()} sub="across all zones"/>
+        <KPICard label="Active zones" value={`${activeVenues}/${venues.length}`} />
+        <KPICard label="High-risk zones" value={highRisk} sub="≥ 75% capacity" />
+        <KPICard label="Open alerts" value={activeAlerts.length} sub={activeAlerts.length ? 'needs attention' : 'all clear'} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium" style={{color:'var(--muted)'}}>Campus map</h2>
+            <button onClick={()=>setView('venues')} className="text-xs" style={{color:'var(--accent)'}}>View all venues</button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {venues.map(v => <ZoneTile key={v.id} venue={v} onClick={()=>setView('venues')} />)}
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-sm font-medium mb-3" style={{color:'var(--muted)'}}>Alert feed</h2>
+          <div className="flex flex-col gap-2">
+            {activeAlerts.length === 0 && (
+              <div className="rounded-xl p-4 text-sm" style={{background:'var(--surface)', border:'1px solid var(--border)', color:'var(--muted)'}}>
+                No active alerts. Every zone is inside its safe threshold.
+              </div>
+            )}
+            {activeAlerts.map(a => {
+              const v = venues.find(v=>v.id===a.venueId);
+              return (
+                <button key={a.id} onClick={()=>onOpenAlert(a.id)} className="text-left rounded-xl p-4" style={{background:'rgba(229,72,77,0.08)', border:'1px solid rgba(229,72,77,0.35)'}}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{background:'rgba(229,72,77,0.2)', color:'#FF9A9D'}}>{a.severity}</span>
+                    <span className="text-xs" style={{color:'var(--muted)'}}>{a.createdAt}</span>
+                  </div>
+                  <div className="text-sm font-medium mb-1">{v?.name}</div>
+                  <p className="text-xs" style={{color:'var(--muted)'}}>{a.message}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================== ALERTS ============================== */
+
+function MiniTrendChart({ points }){
+  const w = 400, h = 160, pad = 28;
+  const max = Math.max(120, ...points.map(p=>p.pct));
+  const min = 0;
+  const x = i => pad + (i/(points.length-1)) * (w - pad*2);
+  const y = v => h - pad - ((v-min)/(max-min)) * (h - pad*2);
+  const path = points.map((p,i)=>`${i===0?'M':'L'} ${x(i)} ${y(p.pct)}`).join(' ');
+  const capY = y(100);
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-40">
+      <line x1={pad} y1={capY} x2={w-pad} y2={capY} stroke="var(--red)" strokeDasharray="4 4" strokeWidth="1"/>
+      <text x={w-pad} y={capY-6} textAnchor="end" fontSize="10" fill="var(--red)">capacity</text>
+      <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2.5"/>
+      {points.map((p,i)=>(
+        <g key={i}>
+          <circle cx={x(i)} cy={y(p.pct)} r="3.5" fill="var(--accent)"/>
+          <text x={x(i)} y={h-8} textAnchor="middle" fontSize="10" fill="var(--muted)">{p.label}</text>
+          <text x={x(i)} y={y(p.pct)-10} textAnchor="middle" fontSize="11" fill="var(--text)" fontFamily="'JetBrains Mono',monospace">{p.pct}%</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function AlertsList({ alerts, venues, onOpen }){
+  return (
+    <div className="p-6 md:p-8">
+      <div className="flex flex-col gap-3 max-w-2xl">
+        {alerts.map(a => {
+          const v = venues.find(v=>v.id===a.venueId);
+          return (
+            <button key={a.id} onClick={()=>onOpen(a.id)} className="text-left rounded-xl p-4 flex items-start justify-between gap-4"
+              style={{ background: a.resolved ? 'var(--surface)' : 'rgba(229,72,77,0.08)', border: `1px solid ${a.resolved ? 'var(--border)' : 'rgba(229,72,77,0.35)'}` }}>
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{background: a.resolved ? 'var(--surface-2)' : 'rgba(229,72,77,0.2)', color: a.resolved ? 'var(--muted)' : '#FF9A9D'}}>
+                    {a.resolved ? 'RESOLVED' : a.severity}
+                  </span>
+                  <span className="text-xs" style={{color:'var(--muted)'}}>{a.createdAt} · {v?.name}</span>
+                </div>
+                <p className="text-sm">{a.message}</p>
+              </div>
+              <Icon name="chev" size={16} className="opacity-40 shrink-0 mt-1"/>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AlertDetail({ alert, venue, onApply, onBack, canApply }){
+  const ranked = [...alert.recommendations].sort((a,b)=>scoreRecommendation(b)-scoreRecommendation(a));
+  const topId = ranked[0]?.id;
+  return (
+    <div className="p-6 md:p-8 max-w-3xl">
+      <button onClick={onBack} className="text-xs mb-4 flex items-center gap-1" style={{color:'var(--muted)'}}>
+        <Icon name="chev" size={14} className="rotate-180"/> Back to alerts
+      </button>
+
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{background: alert.resolved ? 'var(--surface-2)' : 'rgba(229,72,77,0.2)', color: alert.resolved ? 'var(--muted)' : '#FF9A9D'}}>
+          {alert.resolved ? 'RESOLVED' : alert.severity}
+        </span>
+        <span className="text-xs" style={{color:'var(--muted)'}}>{alert.createdAt}</span>
+      </div>
+      <h1 className="text-xl font-medium mb-1">{venue?.name}</h1>
+      <p className="text-sm mb-6" style={{color:'var(--muted)'}}>{alert.message}</p>
+
+      <div className="rounded-xl p-5 mb-5" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
+        <h2 className="text-sm font-medium mb-3" style={{color:'var(--muted)'}}>Occupancy forecast</h2>
+        <MiniTrendChart points={alert.prediction} />
+      </div>
+
+      <div className="rounded-xl p-5 mb-5" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
+        <h2 className="text-sm font-medium mb-2" style={{color:'var(--muted)'}}>Why this is happening</h2>
+        <p className="text-sm leading-relaxed">{alert.cause}</p>
+      </div>
+
+      <h2 className="text-sm font-medium mb-3" style={{color:'var(--muted)'}}>Recommended interventions</h2>
+      <div className="flex flex-col gap-3">
+        {ranked.map(r => (
+          <div key={r.id} className="rounded-xl p-4" style={{ background:'var(--surface)', border:`1px solid ${r.id===topId && !alert.resolved ? 'var(--accent)' : 'var(--border)'}` }}>
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2">
+                {r.id===topId && !alert.resolved && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full" style={{background:'rgba(91,141,239,0.18)', color:'var(--accent)'}}>Top pick</span>}
+                <span className="text-sm font-medium">{r.label}</span>
+              </div>
+              <span className="font-mono text-sm shrink-0" style={{color:'var(--muted)'}}>{scoreRecommendation(r)}</span>
+            </div>
+            <p className="text-xs mb-3" style={{color:'var(--muted)'}}>{r.description}</p>
+            <div className="flex items-center justify-between">
+              <div className="flex gap-4 text-xs font-mono" style={{color:'var(--muted)'}}>
+                <span>Effect {r.effect}/10</span>
+                <span>Cost {r.cost}/10</span>
+                <span>Convenience {r.convenience}/10</span>
+              </div>
+              {r.applied ? (
+                <span className="text-xs flex items-center gap-1" style={{color:'var(--green)'}}><Icon name="check" size={14}/> Applied</span>
+              ) : canApply ? (
+                <button onClick={()=>onApply(alert.id, r.id)} disabled={alert.resolved} className="text-xs px-3 py-1.5 rounded-lg font-medium disabled:opacity-40" style={{background:'var(--accent)', color:'#fff'}}>
+                  Apply plan
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ============================== VENUES ============================== */
+
+function Venues({ venues, canEdit, onOverride }){
+  return (
+    <div className="p-6 md:p-8">
+      <div className="rounded-xl overflow-hidden" style={{border:'1px solid var(--border)'}}>
+        <table className="w-full text-sm">
+          <thead>
+            <tr style={{background:'var(--surface)', color:'var(--muted)'}}>
+              <th className="text-left font-normal px-4 py-3">Venue</th>
+              <th className="text-left font-normal px-4 py-3">Type</th>
+              <th className="text-left font-normal px-4 py-3">Occupancy</th>
+              <th className="text-left font-normal px-4 py-3">Capacity</th>
+              <th className="text-left font-normal px-4 py-3">Status</th>
+              {canEdit && <th className="text-left font-normal px-4 py-3">Override</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {venues.map(v=>{
+              const st = statusOf(v);
+              return (
+                <tr key={v.id} style={{borderTop:'1px solid var(--border)'}}>
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{v.name}</div>
+                    <div className="text-xs" style={{color:'var(--muted)'}}>{v.code}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs" style={{color:'var(--muted)'}}>{v.type}</td>
+                  <td className="px-4 py-3 font-mono">{v.occ}</td>
+                  <td className="px-4 py-3 font-mono" style={{color:'var(--muted)'}}>{v.capacity}</td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1.5 text-xs" style={{color:statusColor(st)}}>
+                      {statusDot(st)} {statusLabel(st)} · {pct(v)}%
+                    </span>
+                  </td>
+                  {canEdit && (
+                    <td className="px-4 py-3">
+                      <input
+                        type="range" min="0" max={Math.round(v.capacity*1.3)} value={v.occ}
+                        onChange={(e)=>onOverride(v.id, parseInt(e.target.value))}
+                        className="w-32 align-middle"
+                      />
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ============================== SCHEDULE ============================== */
+
+function Schedule({ sessions, venues }){
+  return (
+    <div className="p-6 md:p-8">
+      <div className="flex flex-col gap-2 max-w-2xl">
+        {sessions.map(s=>{
+          const v = venues.find(v=>v.id===s.venueId);
+          return (
+            <div key={s.id} className="flex items-center gap-4 rounded-xl p-4" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
+              <div className="font-mono text-xs w-24 shrink-0" style={{color:'var(--muted)'}}>{s.start}</div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium">{s.title}</div>
+                <div className="text-xs" style={{color:'var(--muted)'}}>{v?.name}{s.expected ? ` · ${s.expected.toLocaleString()} expected` : ''}</div>
+              </div>
+              <div className="text-xs font-mono shrink-0" style={{color:'var(--muted)'}}>{s.start} – {s.end}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ============================== SIMULATOR ============================== */
+
+function Simulator({ venues, onCommit }){
+  const [addVisitors, setAddVisitors] = useState(2000);
+  const [atTime, setAtTime] = useState('4:00 PM');
+  const [targetVenueId, setTargetVenueId] = useState('halA');
+  const [result, setResult] = useState(null);
+
+  function runSimulation(){
+    const before = venues.map(v=>({...v}));
+    const target = before.find(v=>v.id===targetVenueId);
+    const overflow = Math.max(0, (target.occ + addVisitors) - target.capacity);
+    const after = before.map(v => v.id === targetVenueId ? {...v, occ: v.occ + addVisitors - overflow} : v);
+
+    // propagate overflow proportionally to spare capacity of other, non-parking-only venues
+    const others = after.filter(v=>v.id!==targetVenueId);
+    const totalSpare = others.reduce((s,v)=>s+Math.max(0, v.capacity - v.occ), 0) || 1;
+    const afterPropagated = after.map(v=>{
+      if(v.id===targetVenueId) return v;
+      const spare = Math.max(0, v.capacity - v.occ);
+      const share = Math.round((spare/totalSpare) * overflow);
+      return {...v, occ: v.occ + share};
+    });
+
+    setResult({ before, after: afterPropagated, overflow });
+  }
+
+  function applyPreset(){
+    setAddVisitors(2000); setAtTime('4:00 PM'); setTargetVenueId('halA');
+  }
+
+  return (
+    <div className="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <div className="lg:col-span-2 rounded-xl p-5 h-fit" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
+        <h2 className="text-sm font-medium mb-4" style={{color:'var(--muted)'}}>What-if scenario</h2>
+        <div className="flex flex-col gap-4">
+          <div>
+            <label className="text-xs block mb-1.5" style={{color:'var(--muted)'}}>Additional visitors</label>
+            <input type="number" value={addVisitors} onChange={e=>setAddVisitors(parseInt(e.target.value)||0)}
+              className="w-full rounded-lg px-3 py-2 text-sm font-mono" style={{background:'var(--surface-2)', border:'1px solid var(--border)', color:'var(--text)'}} />
+          </div>
+          <div>
+            <label className="text-xs block mb-1.5" style={{color:'var(--muted)'}}>Arrival time</label>
+            <input type="text" value={atTime} onChange={e=>setAtTime(e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm font-mono" style={{background:'var(--surface-2)', border:'1px solid var(--border)', color:'var(--text)'}} />
+          </div>
+          <div>
+            <label className="text-xs block mb-1.5" style={{color:'var(--muted)'}}>Target venue</label>
+            <select value={targetVenueId} onChange={e=>setTargetVenueId(e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm" style={{background:'var(--surface-2)', border:'1px solid var(--border)', color:'var(--text)'}}>
+              {venues.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
+          </div>
+          <button onClick={applyPreset} className="text-xs text-left" style={{color:'var(--accent)'}}>Use preset: +2,000 visitors at 4 PM → Exhibition Hall A</button>
+          <button onClick={runSimulation} className="rounded-lg py-2.5 text-sm font-medium mt-1" style={{background:'var(--accent)', color:'#fff'}}>
+            Run simulation
+          </button>
+        </div>
+      </div>
+
+      <div className="lg:col-span-3">
+        {!result && (
+          <div className="rounded-xl p-8 text-sm text-center h-full flex items-center justify-center" style={{background:'var(--surface)', border:'1px dashed var(--border)', color:'var(--muted)'}}>
+            Run a scenario to see a before / after comparison across every zone.
+          </div>
+        )}
+        {result && (
+          <div className="rounded-xl overflow-hidden" style={{border:'1px solid var(--border)'}}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{background:'var(--surface)', color:'var(--muted)'}}>
+                  <th className="text-left font-normal px-4 py-3">Venue</th>
+                  <th className="text-left font-normal px-4 py-3">Before</th>
+                  <th className="text-left font-normal px-4 py-3">After</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.after.map((v,i)=>{
+                  const bv = result.before[i];
+                  const bSt = statusOf(bv), aSt = statusOf(v);
+                  return (
+                    <tr key={v.id} style={{borderTop:'1px solid var(--border)'}}>
+                      <td className="px-4 py-3">{v.name}</td>
+                      <td className="px-4 py-3"><span style={{color:statusColor(bSt)}} className="font-mono">{pct(bv)}%</span></td>
+                      <td className="px-4 py-3"><span style={{color:statusColor(aSt)}} className="font-mono">{pct(v)}%</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="p-4 flex items-center justify-between" style={{background:'var(--surface)', borderTop:'1px solid var(--border)'}}>
+              <span className="text-xs" style={{color:'var(--muted)'}}>
+                {result.overflow > 0 ? `${result.overflow.toLocaleString()} visitors redistributed across nearby zones.` : 'No overflow — the target venue absorbs the load.'}
+              </span>
+              <button onClick={()=>{onCommit(result.after, `+${addVisitors.toLocaleString()} visitors at ${atTime}`); setResult(null);}} className="text-xs px-3 py-1.5 rounded-lg font-medium" style={{background:'var(--green)', color:'#08150F'}}>
+                Commit plan
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ============================== HISTORY ============================== */
+
+function HistoryLog({ log }){
+  return (
+    <div className="p-6 md:p-8">
+      <div className="flex flex-col gap-2 max-w-2xl">
+        {log.length === 0 && <p className="text-sm" style={{color:'var(--muted)'}}>No plans applied yet this session.</p>}
+        {log.map((h,i)=>(
+          <div key={i} className="rounded-xl p-4" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-medium">{h.title}</span>
+              <span className="text-xs font-mono" style={{color:'var(--muted)'}}>{h.time}</span>
+            </div>
+            <p className="text-xs" style={{color:'var(--muted)'}}>{h.detail}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ============================== VISITOR APP ============================== */
+
+function VisitorApp({ venues, sessions }){
+  const candidates = venues.filter(v=>['EXHIBITION','WORKSHOP','AUDITORIUM','HOSPITALITY'].includes(v.type));
+  const best = candidates.reduce((a,b)=> pct(a) <= pct(b) ? a : b);
+  const wait = Math.max(0, Math.round((pct(best)-40)/6));
+
+  return (
+    <div className="p-6 md:p-8 max-w-xl">
+      <div className="rounded-xl p-5 mb-6" style={{background:'linear-gradient(135deg, rgba(91,141,239,0.15), rgba(91,141,239,0.02))', border:'1px solid rgba(91,141,239,0.3)'}}>
+        <h2 className="text-sm font-medium mb-1" style={{color:'var(--accent)'}}>Where should I go now?</h2>
+        <p className="text-lg font-medium">Head to {best.name}</p>
+        <p className="text-sm" style={{color:'var(--muted)'}}>Projected wait: ~{wait} min · {pct(best)}% full</p>
+      </div>
+
+      <h2 className="text-sm font-medium mb-3" style={{color:'var(--muted)'}}>Live zone status</h2>
+      <div className="flex flex-col gap-2 mb-8">
+        {venues.map(v=>{
+          const st = statusOf(v);
+          return (
+            <div key={v.id} className="flex items-center justify-between rounded-lg px-4 py-3" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
+              <span className="text-sm">{v.name}</span>
+              <span className="text-xs flex items-center gap-1.5" style={{color:statusColor(st)}}>{statusDot(st)} {statusLabel(st)}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <h2 className="text-sm font-medium mb-3" style={{color:'var(--muted)'}}>Today's schedule</h2>
+      <div className="flex flex-col gap-2">
+        {sessions.filter(s=>s.expected>0).map(s=>{
+          const v = venues.find(v=>v.id===s.venueId);
+          return (
+            <div key={s.id} className="flex items-center gap-3 text-sm">
+              <span className="font-mono text-xs w-20 shrink-0" style={{color:'var(--muted)'}}>{s.start}</span>
+              <span>{s.title}</span>
+              <span className="text-xs" style={{color:'var(--muted)'}}>· {v?.name}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ============================== ROOT APP ============================== */
+
+function App(){
+  const [stage, setStage] = useState('landing'); // landing | login | app
+  const [profile, setProfile] = useState(null);
+  const [view, setView] = useState('dashboard');
+  const [venues, setVenues] = useState(VENUE_SEED);
+  const [alerts, setAlerts] = useState(ALERT_SEED);
+  const [selectedAlertId, setSelectedAlertId] = useState(null);
+  const [historyLog, setHistoryLog] = useState([]);
+  const [toast, setToast] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [pulseId, setPulseId] = useState(null);
+  const historyRef = useRef({});
+
+  useEffect(()=>{
+    if(stage !== 'app') return;
+    const t = setTimeout(()=>setLoading(false), 650);
+    return ()=>clearTimeout(t);
+  }, [stage]);
+
+  // live tick: gentle random walk on occupancy + rolling history for predictTrend()
+  useEffect(()=>{
+    if(stage !== 'app') return;
+    const interval = setInterval(()=>{
+      setVenues(prev => prev.map(v=>{
+        const drift = Math.round((Math.random()-0.45) * v.capacity * 0.02);
+        const next = Math.max(0, Math.min(Math.round(v.capacity*1.3), v.occ + drift));
+        const h = historyRef.current[v.id] || [];
+        const updated = [...h, {occ: next}].slice(-12);
+        historyRef.current[v.id] = updated;
+        return {...v, occ: next};
+      }));
+    }, 6000);
+    return ()=>clearInterval(interval);
+  }, [stage]);
+
+  function showToast(message, tone='ok'){
+    setToast({message, tone});
+    setTimeout(()=>setToast(null), 3200);
+  }
+
+  function applyRecommendation(alertId, recId){
+    const alert = alerts.find(a=>a.id===alertId);
+    const rec = alert.recommendations.find(r=>r.id===recId);
+    if(rec.moveTo){
+      setVenues(prev => prev.map(v=>{
+        if(v.id === alert.venueId) return {...v, occ: Math.max(0, v.occ - rec.moveAmount)};
+        if(v.id === rec.moveTo) return {...v, occ: v.occ + rec.moveAmount};
+        return v;
+      }));
+    }
+    setAlerts(prev => prev.map(a => a.id !== alertId ? a : {
+      ...a, resolved:true,
+      recommendations: a.recommendations.map(r => r.id===recId ? {...r, applied:true} : r),
+    }));
+    setPulseId(alert.venueId);
+    setTimeout(()=>setPulseId(null), 1300);
+    setHistoryLog(prev => [{ title: rec.label, time: 'just now', detail: `Applied to resolve the ${alert.severity.toLowerCase()} alert at ${venues.find(v=>v.id===alert.venueId)?.name}.` }, ...prev]);
+    showToast('Plan applied — dashboard updated.');
+  }
+
+  function commitSimulation(afterVenues, label){
+    setVenues(afterVenues);
+    setHistoryLog(prev => [{ title: `Simulation committed: ${label}`, time:'just now', detail:'Live occupancy updated across all affected zones.' }, ...prev]);
+    showToast('Simulation committed to live state.');
+  }
+
+  function overrideVenue(id, occ){
+    setVenues(prev => prev.map(v => v.id===id ? {...v, occ} : v));
+  }
+
+  function openAlert(id){ setSelectedAlertId(id); setView('alerts'); }
+
+  if(stage === 'landing') return <Landing onEnter={()=>setStage('login')} />;
+  if(stage === 'login') return <Login onLogin={(p)=>{ setProfile(p); setStage('app'); }} />;
+
+  const selectedAlert = alerts.find(a=>a.id===selectedAlertId);
+  const titles = {
+    dashboard:{t:'Command center', s:'TechNova 2026 · live overview'},
+    alerts:{t: selectedAlert ? 'Alert detail' : 'Alerts', s: selectedAlert ? undefined : 'Every threshold breach, active and resolved'},
+    venues:{t:'Venues', s:'All zones, gates and parking'},
+    schedule:{t:'Schedule', s:'Sessions across both days'},
+    simulate:{t:'What-if simulator', s:'Model an intervention before you commit to it'},
+    history:{t:'History', s:'Applied plans this session'},
+    visitor:{t:'Visitor app preview', s:'What attendees see on their phones'},
+  };
+
+  return (
+    <div className="flex min-h-screen" style={{background:'var(--bg)'}}>
+      <Toast toast={toast} />
+      <Sidebar view={view} setView={(v)=>{setView(v); setSelectedAlertId(null);}} profile={profile} onLogout={()=>{setStage('landing'); setProfile(null); setView('dashboard');}} />
+      <div className="flex-1 min-w-0">
+        <TopBar title={titles[view].t} subtitle={titles[view].s} live={view==='dashboard'} />
+        {view==='dashboard' && (
+          <Dashboard venues={venues} alerts={alerts} sessions={SESSION_SEED} onOpenAlert={openAlert} setView={setView} loading={loading} />
+        )}
+        {view==='alerts' && !selectedAlert && (
+          <AlertsList alerts={alerts} venues={venues} onOpen={openAlert} />
+        )}
+        {view==='alerts' && selectedAlert && (
+          <AlertDetail
+            alert={selectedAlert}
+            venue={venues.find(v=>v.id===selectedAlert.venueId)}
+            onApply={applyRecommendation}
+            onBack={()=>setSelectedAlertId(null)}
+            canApply={profile.role==='ORGANIZER'}
+          />
+        )}
+        {view==='venues' && <Venues venues={venues} canEdit={profile.role==='ORGANIZER'} onOverride={overrideVenue} />}
+        {view==='schedule' && <Schedule sessions={SESSION_SEED} venues={venues} />}
+        {view==='simulate' && profile.role==='ORGANIZER' && <Simulator venues={venues} onCommit={commitSimulation} />}
+        {view==='history' && profile.role==='ORGANIZER' && <HistoryLog log={historyLog} />}
+        {view==='visitor' && <VisitorApp venues={venues} sessions={SESSION_SEED} />}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+
+</script>
+</body>
+</html>
