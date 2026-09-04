@@ -36,6 +36,88 @@
   @keyframes pulseOnce{0%{background-color:rgba(91,141,239,0.25);}100%{background-color:transparent;}}
   .anim-fade{animation:fadeSlideUp 0.8s ease both;}
   .anim-pulse{animation:pulseOnce 1.2s ease;}
+
+  /* ── Visitor Dashboard & UI Enhancement Animations ── */
+  @keyframes tabSlideIn{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:translateX(0);}}
+  @keyframes capacityFill{from{width:0%;}to{width:var(--fill);}}
+  @keyframes glowPulse{0%,100%{box-shadow:0 0 0 0 transparent;}50%{box-shadow:0 0 12px 2px var(--glow-color);}}
+  @keyframes shimmer{0%{background-position:-200% 0;}100%{background-position:200% 0;}}
+  @keyframes gradientBorder{0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;}}
+  @keyframes floatBadge{0%,100%{transform:translateY(0);}50%{transform:translateY(-3px);}}
+  @keyframes scaleIn{from{opacity:0;transform:scale(0.92);}to{opacity:1;transform:scale(1);}}
+
+  .anim-tab{animation:tabSlideIn 0.35s ease both;}
+  .anim-scale{animation:scaleIn 0.4s ease both;}
+
+  .capacity-bar{
+    height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;position:relative;
+  }
+  .capacity-bar-fill{
+    height:100%;border-radius:3px;transition:width 0.8s cubic-bezier(0.4,0,0.2,1);
+    animation:capacityFill 1s ease both;
+  }
+  .capacity-bar-fill.glow{
+    animation:capacityFill 1s ease both, glowPulse 2s ease-in-out infinite;
+  }
+
+  .gradient-card{
+    background:linear-gradient(135deg, rgba(91,141,239,0.18) 0%, rgba(52,199,123,0.08) 50%, rgba(91,141,239,0.12) 100%);
+    background-size:200% 200%;
+    animation:gradientBorder 6s ease infinite;
+    border:1px solid rgba(91,141,239,0.3);
+  }
+
+  .bottom-nav{
+    position:fixed;bottom:0;left:0;right:0;z-index:50;
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    background:rgba(11,13,16,0.88);
+    border-top:1px solid var(--border);
+    padding:6px 0 max(6px, env(safe-area-inset-bottom));
+  }
+  .bottom-nav button{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+    padding:6px 4px;border:none;background:none;cursor:pointer;
+    transition:color 0.2s, transform 0.15s;
+  }
+  .bottom-nav button:active{transform:scale(0.92);}
+  .bottom-nav-label{font-size:10px;line-height:1;}
+
+  .visitor-shell{
+    min-height:100vh;min-height:100dvh;
+    padding-bottom:72px;
+    background:var(--bg);
+  }
+
+  .timeline-dot{
+    width:10px;height:10px;border-radius:50%;border:2px solid var(--accent);
+    background:var(--bg);position:relative;z-index:2;flex-shrink:0;
+  }
+  .timeline-dot.active{background:var(--accent);}
+  .timeline-line{
+    width:2px;background:var(--border);position:absolute;top:10px;bottom:0;left:4px;
+  }
+
+  .skeleton{
+    background:linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
+    background-size:200% 100%;
+    animation:shimmer 1.8s ease-in-out infinite;
+    border-radius:8px;
+  }
+
+  .zone-card-hover{transition:transform 0.2s ease, box-shadow 0.2s ease;}
+  .zone-card-hover:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(0,0,0,0.3);}
+
+  .qr-placeholder{
+    width:160px;height:160px;border-radius:12px;
+    background:white;display:flex;align-items:center;justify-content:center;
+    position:relative;overflow:hidden;
+  }
+  .qr-placeholder::after{
+    content:'';position:absolute;inset:8px;
+    background:repeating-conic-gradient(var(--bg) 0% 25%, white 0% 50%) 0 0 / 16px 16px;
+    border-radius:4px;opacity:0.7;
+  }
+
   @media (prefers-reduced-motion: reduce){
     *{animation:none !important;transition:none !important;}
   }
@@ -296,6 +378,7 @@ function Login({ onLogin }){
   const profiles = [
     { role:'ORGANIZER', name:'Aditi Rao', title:'Event Organizer', access:'Full console access — venues, simulator, alerts, history', initials:'AR' },
     { role:'VOLUNTEER', name:'Rohan Mehta', title:'Gate Volunteer', access:'Live map, alerts and schedule — read-only', initials:'RM' },
+    { role:'VISITOR',   name:'Priya Sharma', title:'Visitor / Attendee', access:'Live zone crowding, schedule, campus map, personal agenda & notifications', initials:'PS' },
   ];
   return (
     <div className="min-h-screen w-full flex items-center justify-center px-6" style={{background:'var(--bg)'}}>
@@ -303,7 +386,7 @@ function Login({ onLogin }){
         <div className="mb-8 text-center">
           <div className="text-lg font-semibold tracking-tight mb-1">CrowdIQ</div>
           <h1 className="text-2xl font-medium mb-2">Choose a demo profile</h1>
-          <p className="text-sm" style={{color:'var(--muted)'}}>Two example accounts, two access levels.</p>
+          <p className="text-sm" style={{color:'var(--muted)'}}>Three demo profiles, three access levels.</p>
         </div>
         <div className="flex flex-col gap-3">
           {profiles.map(p => (
@@ -864,6 +947,469 @@ function VisitorApp({ venues, sessions }){
   );
 }
 
+/* ============================== VISITOR DASHBOARD (Full Attendee Experience) ============================== */
+
+function VisitorTabIcon({ name, size=22 }){
+  const paths = {
+    home: <><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><polyline points="9 21 9 14 15 14 15 21"/></>,
+    schedule: <><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/><circle cx="12" cy="15" r="1.5" fill="currentColor" stroke="none"/></>,
+    map: <><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></>,
+    info: <><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></>,
+  }[name];
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      {paths}
+    </svg>
+  );
+}
+
+function CapacityBar({ value, max, size='md' }){
+  const p = Math.round((value/max)*100);
+  const clampedP = Math.min(p, 100);
+  const color = p >= 90 ? 'var(--red)' : p >= 75 ? 'var(--amber)' : p >= 50 ? 'var(--accent)' : 'var(--green)';
+  const isHigh = p >= 75;
+  return (
+    <div className={`capacity-bar ${size==='sm'?'':'mt-1'}`} style={{height: size==='sm'?'4px':'6px'}}>
+      <div
+        className={`capacity-bar-fill ${isHigh?'glow':''}`}
+        style={{'--fill':`${clampedP}%`, '--glow-color':color, width:`${clampedP}%`, background:color}}
+      />
+    </div>
+  );
+}
+
+function VisitorHome({ venues, sessions, profile }){
+  const candidates = venues.filter(v=>['EXHIBITION','WORKSHOP','AUDITORIUM','HOSPITALITY'].includes(v.type));
+  const best = candidates.reduce((a,b)=> pct(a) <= pct(b) ? a : b);
+  const wait = Math.max(0, Math.round((pct(best)-40)/6));
+  const criticalZones = venues.filter(v=> pct(v) >= 85);
+
+  const hours = new Date().getHours();
+  const greeting = hours < 12 ? 'Good morning' : hours < 17 ? 'Good afternoon' : 'Good evening';
+
+  return (
+    <div className="anim-tab" key="home">
+      {/* Header */}
+      <div className="px-5 pt-6 pb-4">
+        <p className="text-sm" style={{color:'var(--muted)'}}>{greeting},</p>
+        <h1 className="text-xl font-semibold">{profile.name}</h1>
+        <p className="text-xs mt-1" style={{color:'var(--muted)'}}>TechNova 2026 · Live now</p>
+      </div>
+
+      {/* Critical zone alert */}
+      {criticalZones.length > 0 && (
+        <div className="mx-5 mb-4 rounded-xl px-4 py-3 anim-scale" style={{background:'rgba(229,72,77,0.1)', border:'1px solid rgba(229,72,77,0.3)'}}>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-semibold" style={{color:'#FF9A9D'}}>⚠ Crowd Alert</span>
+          </div>
+          <p className="text-sm" style={{color:'#FF9A9D'}}>
+            {criticalZones.map(v=>v.name).join(', ')} {criticalZones.length===1?'is':'are'} very crowded right now — consider visiting later.
+          </p>
+        </div>
+      )}
+
+      {/* Smart recommendation card */}
+      <div className="mx-5 mb-5 rounded-2xl p-5 gradient-card">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{background:'rgba(91,141,239,0.2)', color:'var(--accent)', animation:'floatBadge 3s ease infinite'}}>✨ Smart pick</span>
+        </div>
+        <h2 className="text-lg font-semibold mb-0.5">Head to {best.name}</h2>
+        <p className="text-sm mb-3" style={{color:'var(--muted)'}}>
+          Least crowded venue right now · {pct(best)}% full · ~{wait} min wait
+        </p>
+        <CapacityBar value={best.occ} max={best.capacity} />
+        <div className="flex items-center justify-between mt-2 text-xs" style={{color:'var(--muted)'}}>
+          <span>{best.occ} / {best.capacity} people</span>
+          <span>{best.type.charAt(0)+best.type.slice(1).toLowerCase()}</span>
+        </div>
+      </div>
+
+      {/* Live zones */}
+      <div className="px-5 mb-5">
+        <h2 className="text-sm font-medium mb-3" style={{color:'var(--muted)'}}>Live zone status</h2>
+        <div className="grid grid-cols-2 gap-3">
+          {venues.map(v => {
+            const st = statusOf(v);
+            const p = pct(v);
+            return (
+              <div key={v.id} className="rounded-xl p-3.5 zone-card-hover" style={{background:'var(--surface)', border:`1px solid ${st==='CRITICAL'?'rgba(229,72,77,0.4)':'var(--border)'}`}}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] uppercase tracking-wider" style={{color:'var(--muted)'}}>{v.code}</span>
+                  <span style={{fontSize:'10px'}}>{statusDot(st)}</span>
+                </div>
+                <div className="text-sm font-medium truncate mb-1">{v.name}</div>
+                <CapacityBar value={v.occ} max={v.capacity} size="sm" />
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className="font-mono text-xs" style={{color:statusColor(st)}}>{p}%</span>
+                  <span className="text-[10px]" style={{color:'var(--muted)'}}>{v.occ}/{v.capacity}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Upcoming sessions preview */}
+      <div className="px-5 pb-6">
+        <h2 className="text-sm font-medium mb-3" style={{color:'var(--muted)'}}>Coming up next</h2>
+        {sessions.filter(s=>s.expected>0).slice(0,3).map(s => {
+          const v = venues.find(v=>v.id===s.venueId);
+          const vSt = v ? statusOf(v) : 'LOW';
+          return (
+            <div key={s.id} className="flex items-center gap-3 rounded-lg px-3 py-2.5 mb-2" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
+              <div className="font-mono text-xs shrink-0 w-16 text-center" style={{color:'var(--accent)'}}>{s.start}</div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">{s.title}</div>
+                <div className="text-[11px]" style={{color:'var(--muted)'}}>{v?.name} · {s.expected.toLocaleString()} expected</div>
+              </div>
+              <span style={{fontSize:'10px'}}>{statusDot(vSt)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function VisitorSchedule({ sessions, venues }){
+  const [starred, setStarred] = useState({});
+  const toggle = (id) => setStarred(prev => ({...prev, [id]: !prev[id]}));
+  const sorted = [...sessions].filter(s=>s.expected>0);
+
+  return (
+    <div className="anim-tab px-5 pt-6 pb-6" key="schedule">
+      <h1 className="text-xl font-semibold mb-1">Schedule</h1>
+      <p className="text-sm mb-5" style={{color:'var(--muted)'}}>Tap ★ to add sessions to your personal plan</p>
+
+      {/* Personal plan summary */}
+      {Object.values(starred).some(v=>v) && (
+        <div className="mb-5 rounded-xl p-4" style={{background:'rgba(52,199,123,0.08)', border:'1px solid rgba(52,199,123,0.25)'}}>
+          <h3 className="text-xs font-semibold mb-2" style={{color:'#7FE3AC'}}>⭐ Your plan ({Object.values(starred).filter(v=>v).length} sessions)</h3>
+          <div className="flex flex-wrap gap-2">
+            {sorted.filter(s=>starred[s.id]).map(s=>(
+              <span key={s.id} className="text-xs px-2.5 py-1 rounded-full" style={{background:'rgba(52,199,123,0.15)', color:'#7FE3AC'}}>
+                {s.start} · {s.title}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Timeline */}
+      <div className="flex flex-col">
+        {sorted.map((s, idx) => {
+          const v = venues.find(v=>v.id===s.venueId);
+          const vSt = v ? statusOf(v) : 'LOW';
+          const isLast = idx === sorted.length - 1;
+          const isStarred = starred[s.id];
+
+          return (
+            <div key={s.id} className="flex gap-4" style={{minHeight:'80px'}}>
+              {/* Timeline column */}
+              <div className="flex flex-col items-center relative" style={{width:'10px'}}>
+                <div className={`timeline-dot ${idx===0?'active':''}`} />
+                {!isLast && <div className="timeline-line" />}
+              </div>
+
+              {/* Content card */}
+              <div className="flex-1 pb-4">
+                <div className="rounded-xl p-4 zone-card-hover" style={{background:'var(--surface)', border:`1px solid ${isStarred?'rgba(52,199,123,0.35)':'var(--border)'}`}}>
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div>
+                      <div className="font-mono text-xs mb-1" style={{color:'var(--accent)'}}>{s.start} – {s.end}</div>
+                      <h3 className="text-sm font-medium">{s.title}</h3>
+                    </div>
+                    <button
+                      onClick={()=>toggle(s.id)}
+                      className="text-lg shrink-0 mt-0.5 transition-transform active:scale-75"
+                      style={{color: isStarred ? '#E8A93B' : 'var(--muted)', filter: isStarred ? 'drop-shadow(0 0 4px rgba(232,169,59,0.4))' : 'none'}}
+                      aria-label={isStarred ? 'Remove from plan' : 'Add to plan'}
+                    >
+                      {isStarred ? '★' : '☆'}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs" style={{color:'var(--muted)'}}>
+                    <span className="flex items-center gap-1">{statusDot(vSt)} {v?.name}</span>
+                    <span>·</span>
+                    <span>{s.expected.toLocaleString()} expected</span>
+                  </div>
+                  {v && (
+                    <div className="mt-2">
+                      <CapacityBar value={v.occ} max={v.capacity} size="sm" />
+                      <div className="text-[10px] mt-1" style={{color:'var(--muted)'}}>{pct(v)}% full right now</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function VisitorMap({ venues, sessions }){
+  const [selectedId, setSelectedId] = useState(null);
+  const selected = venues.find(v=>v.id===selectedId);
+  const venueSessions = selectedId ? sessions.filter(s=>s.venueId===selectedId) : [];
+
+  const typeEmoji = (type) => {
+    return {REGISTRATION:'📋',AUDITORIUM:'🎤',EXHIBITION:'🏛️',PARKING:'🅿️',WORKSHOP:'🔧',HOSPITALITY:'🍽️'}[type] || '📍';
+  };
+
+  return (
+    <div className="anim-tab px-5 pt-6 pb-6" key="map">
+      <h1 className="text-xl font-semibold mb-1">Campus Map</h1>
+      <p className="text-sm mb-5" style={{color:'var(--muted)'}}>Tap any zone to see details & live status</p>
+
+      {/* Zone grid — follows row/col from data */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        {venues.map(v => {
+          const st = statusOf(v);
+          const p = pct(v);
+          const isSelected = selectedId === v.id;
+          return (
+            <button
+              key={v.id}
+              onClick={()=>setSelectedId(isSelected ? null : v.id)}
+              className="text-left rounded-xl p-3.5 zone-card-hover transition-all"
+              style={{
+                background: isSelected ? 'var(--surface-2)' : 'var(--surface)',
+                border: `1.5px solid ${isSelected ? 'var(--accent)' : st==='CRITICAL' ? 'rgba(229,72,77,0.4)' : 'var(--border)'}`,
+                transform: isSelected ? 'scale(1.02)' : 'scale(1)',
+              }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-base">{typeEmoji(v.type)}</span>
+                <span style={{fontSize:'10px'}}>{statusDot(st)}</span>
+              </div>
+              <div className="text-sm font-medium truncate mb-1.5">{v.name}</div>
+              <CapacityBar value={v.occ} max={v.capacity} size="sm" />
+              <div className="flex items-center justify-between mt-1.5">
+                <span className="font-mono text-xs" style={{color:statusColor(st)}}>{p}%</span>
+                <span className="text-[10px]" style={{color:'var(--muted)'}}>{v.occ}/{v.capacity}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Zone detail panel */}
+      {selected && (
+        <div className="rounded-xl p-5 anim-scale" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{typeEmoji(selected.type)}</span>
+              <div>
+                <h3 className="text-base font-semibold">{selected.name}</h3>
+                <span className="text-xs" style={{color:'var(--muted)'}}>{selected.code} · {selected.type}</span>
+              </div>
+            </div>
+            <button onClick={()=>setSelectedId(null)} className="p-1 rounded-lg" style={{color:'var(--muted)'}}>
+              <Icon name="close" size={16}/>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="rounded-lg p-3 text-center" style={{background:'var(--surface-2)'}}>
+              <div className="font-mono text-lg" style={{color:statusColor(statusOf(selected))}}>{pct(selected)}%</div>
+              <div className="text-[10px]" style={{color:'var(--muted)'}}>Occupancy</div>
+            </div>
+            <div className="rounded-lg p-3 text-center" style={{background:'var(--surface-2)'}}>
+              <div className="font-mono text-lg">{selected.occ}</div>
+              <div className="text-[10px]" style={{color:'var(--muted)'}}>Current</div>
+            </div>
+            <div className="rounded-lg p-3 text-center" style={{background:'var(--surface-2)'}}>
+              <div className="font-mono text-lg" style={{color:'var(--muted)'}}>{selected.capacity}</div>
+              <div className="text-[10px]" style={{color:'var(--muted)'}}>Capacity</div>
+            </div>
+          </div>
+
+          <CapacityBar value={selected.occ} max={selected.capacity} />
+
+          {venueSessions.length > 0 && (
+            <div className="mt-4">
+              <h4 className="text-xs font-medium mb-2" style={{color:'var(--muted)'}}>Sessions at this venue</h4>
+              {venueSessions.map(s=>(
+                <div key={s.id} className="flex items-center gap-2 py-1.5 text-xs">
+                  <span className="font-mono w-20 shrink-0" style={{color:'var(--accent)'}}>{s.start}–{s.end}</span>
+                  <span>{s.title}</span>
+                  {s.expected > 0 && <span style={{color:'var(--muted)'}}>· {s.expected.toLocaleString()}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Legend */}
+      <div className="mt-5 flex flex-wrap gap-x-5 gap-y-1">
+        {[{c:'var(--green)',l:'Normal'},{c:'var(--accent)',l:'Watch'},{c:'var(--amber)',l:'High'},{c:'var(--red)',l:'Critical'}].map(item=>(
+          <div key={item.l} className="flex items-center gap-1.5 text-[11px]" style={{color:'var(--muted)'}}>
+            <span className="w-2 h-2 rounded-full" style={{background:item.c}} />
+            {item.l}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function VisitorMyInfo({ profile, onLogout }){
+  return (
+    <div className="anim-tab px-5 pt-6 pb-6" key="info">
+      <h1 className="text-xl font-semibold mb-5">My Info</h1>
+
+      {/* Profile card */}
+      <div className="rounded-2xl p-5 mb-5 text-center" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
+        <div className="w-16 h-16 rounded-full mx-auto mb-3 flex items-center justify-center font-mono text-xl font-semibold" style={{background:'linear-gradient(135deg, var(--accent), #34C77B)', color:'white'}}>
+          {profile.initials}
+        </div>
+        <h2 className="text-lg font-semibold">{profile.name}</h2>
+        <p className="text-sm" style={{color:'var(--muted)'}}>Attendee · Student</p>
+        <div className="flex justify-center gap-3 mt-3">
+          <span className="text-xs px-3 py-1 rounded-full" style={{background:'var(--surface-2)', color:'var(--accent)'}}>🎟 #TN-2026-4829</span>
+          <span className="text-xs px-3 py-1 rounded-full" style={{background:'rgba(52,199,123,0.1)', color:'#7FE3AC'}}>✓ Checked in</span>
+        </div>
+      </div>
+
+      {/* QR Ticket */}
+      <div className="rounded-2xl p-5 mb-5 flex flex-col items-center" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
+        <h3 className="text-sm font-medium mb-3" style={{color:'var(--muted)'}}>Entry QR Code</h3>
+        <div className="qr-placeholder mb-3">
+          <span style={{position:'relative', zIndex:3, fontSize:'11px', fontFamily:'JetBrains Mono', color:'var(--bg)', fontWeight:600}}>SCAN ME</span>
+        </div>
+        <p className="text-xs text-center" style={{color:'var(--muted)'}}>Show this at any gate for quick entry</p>
+      </div>
+
+      {/* Event details */}
+      <div className="rounded-2xl p-5 mb-5" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
+        <h3 className="text-sm font-medium mb-3" style={{color:'var(--muted)'}}>Event Details</h3>
+        <div className="flex flex-col gap-3">
+          {[
+            {label:'Event', value:'TechNova 2026 — National Tech Festival'},
+            {label:'Dates', value:'March 15–16, 2026'},
+            {label:'Venue', value:'University Campus, Main Block'},
+            {label:'Your pass', value:'Full Access · All Zones'},
+          ].map(item=>(
+            <div key={item.label} className="flex items-start justify-between gap-2">
+              <span className="text-xs shrink-0" style={{color:'var(--muted)'}}>{item.label}</span>
+              <span className="text-sm text-right">{item.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Emergency & Help */}
+      <div className="rounded-2xl p-5 mb-5" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
+        <h3 className="text-sm font-medium mb-3" style={{color:'var(--muted)'}}>Emergency & Help</h3>
+        <div className="flex flex-col gap-2">
+          {[
+            {icon:'🏥', label:'Medical Aid', detail:'First-aid booth at Registration (Zone R)'},
+            {icon:'🔒', label:'Security', detail:'Dial ext. 100 or visit any gate'},
+            {icon:'❓', label:'Help Desk', detail:'Near Food Court (Zone E) — 9 AM to 8 PM'},
+            {icon:'📱', label:'Lost & Found', detail:'Registration desk — Zone R'},
+          ].map(item=>(
+            <div key={item.label} className="flex items-start gap-3 py-1.5">
+              <span className="text-base shrink-0">{item.icon}</span>
+              <div>
+                <div className="text-sm font-medium">{item.label}</div>
+                <div className="text-xs" style={{color:'var(--muted)'}}>{item.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Logout */}
+      <button
+        onClick={onLogout}
+        className="w-full rounded-xl py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+        style={{background:'var(--surface)', border:'1px solid var(--border)', color:'var(--muted)'}}
+      >
+        <Icon name="logout" size={16}/> Switch profile
+      </button>
+    </div>
+  );
+}
+
+function VisitorDashboard({ venues, sessions, profile, onLogout }){
+  const [tab, setTab] = useState('home');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(()=>{
+    const t = setTimeout(()=>setLoading(false), 500);
+    return ()=>clearTimeout(t);
+  },[]);
+
+  const tabs = [
+    {id:'home',     label:'Home',     icon:'home'},
+    {id:'schedule', label:'Schedule', icon:'schedule'},
+    {id:'map',      label:'Map',      icon:'map'},
+    {id:'info',     label:'My Info',  icon:'info'},
+  ];
+
+  if(loading){
+    return (
+      <div className="visitor-shell">
+        <div className="px-5 pt-8">
+          <div className="skeleton h-6 w-32 mb-3" />
+          <div className="skeleton h-4 w-48 mb-6" />
+          <div className="skeleton h-32 w-full mb-4 rounded-2xl" />
+          <div className="grid grid-cols-2 gap-3">
+            {[0,1,2,3].map(i=><div key={i} className="skeleton h-24 rounded-xl" />)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="visitor-shell">
+      {/* Tab content */}
+      {tab==='home' && <VisitorHome venues={venues} sessions={sessions} profile={profile} />}
+      {tab==='schedule' && <VisitorSchedule sessions={sessions} venues={venues} />}
+      {tab==='map' && <VisitorMap venues={venues} sessions={sessions} />}
+      {tab==='info' && <VisitorMyInfo profile={profile} onLogout={onLogout} />}
+
+      {/* Bottom navigation */}
+      <div className="bottom-nav flex">
+        {tabs.map(t=>(
+          <button
+            key={t.id}
+            onClick={()=>setTab(t.id)}
+            style={{color: tab===t.id ? 'var(--accent)' : 'var(--muted)'}}
+          >
+            <VisitorTabIcon name={t.icon} size={20}/>
+            <span className="bottom-nav-label" style={{fontWeight:tab===t.id?'600':'400'}}>{t.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ============================== MOBILE BOTTOM NAV (Organizer / Volunteer) ============================== */
+
+function MobileBottomNav({ view, setView, profile }){
+  const items = NAV_ITEMS.filter(i => !i.organizerOnly || profile.role === 'ORGANIZER').slice(0,5);
+  return (
+    <div className="bottom-nav flex md:hidden">
+      {items.map(it=>(
+        <button
+          key={it.id}
+          onClick={()=>setView(it.id)}
+          style={{color: view===it.id ? 'var(--accent)' : 'var(--muted)'}}
+        >
+          <Icon name={it.icon} size={18}/>
+          <span className="bottom-nav-label" style={{fontWeight:view===it.id?'600':'400'}}>{it.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ============================== ROOT APP ============================== */
 
 function App(){
@@ -941,6 +1487,17 @@ function App(){
   if(stage === 'landing') return <Landing onEnter={()=>setStage('login')} />;
   if(stage === 'login') return <Login onLogin={(p)=>{ setProfile(p); setStage('app'); }} />;
 
+  // Visitor role gets a dedicated mobile-style experience
+  if(profile.role === 'VISITOR'){
+    return (
+      <VisitorDashboard
+        venues={venues}
+        sessions={SESSION_SEED}
+        profile={profile}
+        onLogout={()=>{setStage('landing'); setProfile(null); setView('dashboard');}}
+      />
+    );
+  }
   const selectedAlert = alerts.find(a=>a.id===selectedAlertId);
   const titles = {
     dashboard:{t:'Command center', s:'TechNova 2026 · live overview'},
@@ -956,7 +1513,7 @@ function App(){
     <div className="flex min-h-screen" style={{background:'var(--bg)'}}>
       <Toast toast={toast} />
       <Sidebar view={view} setView={(v)=>{setView(v); setSelectedAlertId(null);}} profile={profile} onLogout={()=>{setStage('landing'); setProfile(null); setView('dashboard');}} />
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0" style={{paddingBottom:'72px'}}>
         <TopBar title={titles[view].t} subtitle={titles[view].s} live={view==='dashboard'} />
         {view==='dashboard' && (
           <Dashboard venues={venues} alerts={alerts} sessions={SESSION_SEED} onOpenAlert={openAlert} setView={setView} loading={loading} />
@@ -979,6 +1536,7 @@ function App(){
         {view==='history' && profile.role==='ORGANIZER' && <HistoryLog log={historyLog} />}
         {view==='visitor' && <VisitorApp venues={venues} sessions={SESSION_SEED} />}
       </div>
+      <MobileBottomNav view={view} setView={(v)=>{setView(v); setSelectedAlertId(null);}} profile={profile} />
     </div>
   );
 }
